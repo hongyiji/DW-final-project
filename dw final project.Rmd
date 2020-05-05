@@ -1,0 +1,311 @@
+---
+title: "Homework"
+output: html_document
+---
+
+```{r setup,include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+Sys.setlocale(locale="English")
+```
+
+## 1
+
+### visualize the trend of cases and deaths on the country level.
+```{r}
+library(dplyr)
+library(lubridate)
+library(tidyverse)
+us <- read.csv("us.csv")
+us$date <- ymd(us$date)
+us %>% gather(key=kind,value="count",cases:deaths) %>%
+  ggplot(aes(x=date,y=count,color=kind)) + geom_line()
+us %>% gather(key=kind,value="count",cases) %>%
+  ggplot(aes(x=date,y=count,color=kind)) + geom_line()
+us %>% gather(key=kind,value="count",deaths) %>%
+  ggplot(aes(x=date,y=count,color=kind)) + geom_line()
+
+```
+
+### order the states by some indicators 
+### create a new indicator 'deathRate = deaths/cases'
+### visualize the trend of cases and deaths on the state level.
+```{r fig.height=40,fig.width=8}
+states <- read.csv("us-states.csv")
+df <- states %>% filter(date=="2020-04-26") %>% mutate(deathRate=round(deaths/cases,2))
+# order by cases
+df %>% arrange(desc(cases)) %>% head(10)
+
+# order by deaths
+df %>% arrange(desc(deaths)) %>% head(10)
+
+
+# order by death rate
+df %>% arrange(desc(deathRate)) %>% head(10)
+
+states$date <- ymd(states$date)
+states %>% gather(key="kind",value="count",cases:deaths) %>%
+  ggplot(aes(x=date,y=count,color=kind)) + geom_line() + 
+  facet_grid(scales = "free_y",rows=vars(state),cols=vars(kind))
+```
+
+### choose the top 300 counties with the most cases
+### create a new indicator 'deathRate = deaths/cases'
+```{r}
+counties <- read.csv("us-counties.csv")
+# the top 300 counties with the most cases
+df <- counties %>% filter(date=="2020-04-26") %>% filter(county!="Unknown") %>%
+  mutate(deathRate=round(deaths/cases,2)) %>%
+  arrange(desc(cases)) %>% head(300)
+df
+```
+
+### order the counties by some indicators 
+```{r}
+# order by cases
+df %>% arrange(desc(cases))
+# order by deaths
+df %>% arrange(desc(deaths))
+# order by the death rate
+df %>% arrange(desc(deathRate))
+```
+
+### visualize the trend of cases and deaths on the county level.
+```{r fig.height=80,fig.width=8}
+counties$date <- ymd(counties$date)
+counties %>% filter(county %in% df$county) %>% gather(key="kind",value="count",cases:deaths) %>%
+  ggplot(aes(x=date,y=count,color=kind)) + geom_line() + 
+  facet_grid(scales = "free_y",rows=vars(fips),cols=vars(kind))
+```
+
+## 2
+
+###First, we have to do some scraping and cleaning.
+```{r}
+readData <- function(filename){
+  dat <- read.csv(filename,nrows = 64)
+  rows <- c("Population estimates, July 1, 2019,  (V2019)",
+  "Persons under 5 years, percent", "Persons under 18 years, percent",
+  "Persons 65 years and over, percent", "Female persons, percent","White alone, percent",
+  "Black or African American alone, percent","Hispanic or Latino, percent",
+  "High school graduate or higher, percent of persons age 25 years+, 2014-2018",
+  "Bachelor's degree or higher, percent of persons age 25 years+, 2014-2018",
+  "Persons  without health insurance, under age 65 years, percent",
+  "Persons in poverty, percent",
+  "Population per square mile, 2010")
+  dat <- dat[dat$Fact %in% rows, ]
+  dat <- dat[, c(1, seq(3, ncol(dat), by=2))]
+  dat
+}
+dat1 <- readData("QuickFacts Apr-27-2020 (1).csv")
+dat2 <- readData("QuickFacts Apr-27-2020 (2).csv")
+dat3 <- readData("QuickFacts Apr-27-2020 (3).csv")
+dat4 <- readData("QuickFacts Apr-27-2020 (4).csv")
+dat5 <- readData("QuickFacts Apr-27-2020 (5).csv")
+dat6 <- readData("QuickFacts Apr-27-2020 (6).csv")
+dat7 <- readData("QuickFacts Apr-27-2020 (7).csv")
+dat8 <- readData("QuickFacts Apr-27-2020 (8).csv")
+dat9 <- readData("QuickFacts Apr-27-2020.csv")
+df <- merge(dat1, dat2)
+df <- merge(df, dat3)
+df <- merge(df, dat4)
+df <- merge(df, dat5)
+df <- merge(df, dat6)
+df <- merge(df, dat7)
+df <- merge(df, dat8)
+df <- merge(df, dat9)
+dat <- df %>% gather(key=state, value=value, -Fact) %>% spread(Fact, value)
+dat
+```
+
+### rename state column to merge 2 datasets 
+```{r}
+
+dat$state<-c("Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","District of Columbia","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming")
+dat
+
+```
+
+### filter the row by date=="2020-04-26"
+```{r}
+states <- states %>% filter(date=="2020-04-26")
+states
+
+```
+
+### merge 2 datasets
+### craete new indicators infectionRate, rate and toto death rate
+```{r}
+df <- merge(states, dat)
+df$pop <- gsub(",", "", df$`Population estimates, July 1, 2019,  (V2019)`)
+df$pop <- as.numeric(df$pop)
+df$infectionRate <- df$cases/df$pop
+df$deathRate <- df$deaths/df$pop
+df$rate <- df$deaths/df$cases
+df
+```
+
+### order the staes by some indicators
+```{r}
+df %>% arrange(desc(`Bachelor's degree or higher, percent of persons age 25 years+, 2014-2018`))
+df %>% arrange(desc(`infectionRate`))
+df %>% arrange(desc(`deathRate`))
+```
+
+### make the data in the data frame numerical fo further work
+```{r}
+df$under5 <- as.numeric(gsub("%","", df$`Persons under 5 years, percent`))
+df$black <- as.numeric(gsub("%","", df$`Black or African American alone, percent`))
+df$female <- as.numeric(gsub("%","", df$`Female persons, percent`))
+df$highschool <- as.numeric(gsub("%","", df$`High school graduate or higher, percent of persons age 25 years+, 2014-2018`))
+df$his <- as.numeric(gsub("%","", df$`Hispanic or Latino, percent`))
+df$withoutInsurance <- as.numeric(gsub("%","", df$`Persons  without health insurance, under age 65 years, percent`))
+df$over65 <- as.numeric(gsub("%","", df$`Persons 65 years and over, percent`))
+df$poverty <- as.numeric(gsub("%","", df$`Persons in poverty, percent`))
+df$under18 <- as.numeric(gsub("%","", df$`Persons under 18 years, percent`))
+df$popPerMile <- as.numeric(gsub("%","", df$`Population per square mile, 2010`))
+df$white <- as.numeric(gsub("%","", df$`White alone, percent`))
+df$bachelor <- as.numeric(gsub("%","", df$`Bachelor's degree or higher, percent of persons age 25 years+, 2014-2018`))
+```
+
+### (1)
+```{r}
+df2 <- df %>% filter(date=="2020-04-26")
+df2
+```
+
+### make plot to show the relationship between death rate and 11 other indicators
+```{r}
+ggplot(df2, aes(x=under5, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons under 5 years, percent", y="death Rate")
+
+ggplot(df2, aes(x=under18, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons under 18 years, percent", y="death Rate")
+
+
+ggplot(df2, aes(x=over65, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons 65 years and over, percent", y="death Rate")
+
+ggplot(df2, aes(x=female, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Female persons, percent", y="death Rate")
+
+
+
+ggplot(df2, aes(x=white, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="White alone, percent", y="death Rate")
+
+
+
+ggplot(df2, aes(x=black, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Black or African American alone, percent", y="death Rate")
+
+
+
+ggplot(df2, aes(x=his, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Hispanic or Latino, percent", y="death Rate")
+
+
+ggplot(df2, aes(x=his, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Hispanic or Latino, percent", y="death Rate")
+
+
+ggplot(df2, aes(x=highschool, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="High school graduate or higher, percent of persons age 25 years+, 2014-2018", y="death Rate")
+
+ggplot(df2, aes(x=bachelor, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Bachelor's degree or higher, percent of persons age 25 years+, 2014-2018", y="death Rate")
+
+ggplot(df2, aes(x=poverty, y=rate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons  without health insurance, under age 65 years, percent", y="death Rate")
+
+```
+
+### make plot to show the relationship between total death rate and 11 other indicators
+```{r}
+ggplot(df2, aes(x=under5, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons under 5 years, percent", y="Total death rate")
+
+ggplot(df2, aes(x=under18, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons under 18 years, percent", y="Total death rate")
+
+
+ggplot(df2, aes(x=over65, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons 65 years and over, percent", y="Total death rate")
+
+ggplot(df2, aes(x=female, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Female persons, percent", y="Total death rate")
+
+
+
+ggplot(df2, aes(x=white, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="White alone, percent", y="Total death rate")
+
+
+
+ggplot(df2, aes(x=black, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Black or African American alone, percent", y="Total death rate")
+
+
+
+ggplot(df2, aes(x=his, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Hispanic or Latino, percent", y="Total death rate")
+
+
+ggplot(df2, aes(x=his, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Hispanic or Latino, percent", y="Total death rate")
+
+
+ggplot(df2, aes(x=highschool, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="High school graduate or higher, percent of persons age 25 years+, 2014-2018", y="Total death rate")
+
+ggplot(df2, aes(x=bachelor, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Bachelor's degree or higher, percent of persons age 25 years+, 2014-2018", y="Total death rate")
+
+ggplot(df2, aes(x=poverty, y=deathRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons  without health insurance, under age 65 years, percent", y="Total death rate")
+```
+
+### make plot to show the relationship between infection rate and 11 other indicators
+```{r}
+ggplot(df2, aes(x=under5, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons under 5 years, percent", y="Total infection rate")
+
+ggplot(df2, aes(x=under18, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons under 18 years, percent", y="Total infection rate")
+
+
+ggplot(df2, aes(x=over65, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons 65 years and over, percent", y="Total infection rate")
+
+ggplot(df2, aes(x=female, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Female persons, percent", y="Total infection rate")
+
+
+
+ggplot(df2, aes(x=white, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="White alone, percent", y="Total infection rate")
+
+
+
+ggplot(df2, aes(x=black, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Black or African American alone, percent", y="Total infection rate")
+
+
+
+ggplot(df2, aes(x=his, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Hispanic or Latino, percent", y="Total infection rate")
+
+
+ggplot(df2, aes(x=his, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Hispanic or Latino, percent", y="Total infection rate")
+
+
+ggplot(df2, aes(x=highschool, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="High school graduate or higher, percent of persons age 25 years+, 2014-2018", y="Total infection rate")
+
+ggplot(df2, aes(x=bachelor, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Bachelor's degree or higher, percent of persons age 25 years+, 2014-2018", y="Total infection rate")
+
+ggplot(df2, aes(x=poverty, y=infectionRate)) + geom_point() + geom_smooth(se=F) +
+  labs(x="Persons  without health insurance, under age 65 years, percent", y="Total infection rate")
+```
+
